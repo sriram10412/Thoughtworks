@@ -1,1 +1,84 @@
+image:
+  name: "$CI_TEMPLATE_REGISTRY_HOST/gitlab-org/terraform-images/releases/1.4:v1.0.0"
 
+variables:
+  ENV: dev
+  CHDIR: infra/$DIR
+  REGION: us-east-1
+
+stages: [ validate, tfscan, plan, deploy, cleanup ]
+
+validate:
+  stage: validate
+  script:
+    - terraform --version
+    - echo " *** Environment is - $ENV , Runner Tags - $CI_RUNNER_TAGS *** "
+    - terraform -chdir=$CHDIR init -reconfigure
+    - terraform -chdir=$CHDIR validate
+
+checkov:
+  stage: tfscan
+  allow_failure: true  # True for AutoDevOps compatibility
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint:
+      - '/usr/bin/env'
+      - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+  rules:
+    - if: $SAST_DISABLED
+      when: never
+    - if: $CI_COMMIT_BRANCH
+      exists:
+        - '**/*.yml'
+        - '**/*.yaml'
+        - '**/*.json'
+        - '**/*.template'
+        - '**/*.tf'      
+        - '**/serverless.yml'
+        - '**/serverless.yaml'
+  script:
+    - checkov -d $CHDIR -o junitxml | tee checkov.test.xml
+    # Use `script` to emulate `tty` for colored output.
+    - script -q -c 'checkov -d . ; echo $? > CKVEXIT'
+    - exit $(cat CKVEXIT)
+  artifacts:
+    reports:
+      junit: $CHDIR/checkov.test.xml
+    paths:
+      - $CHDIR/checkov.test.xml
+
+plan:
+  stage: plan
+  script:
+    - terraform --version
+    - echo " *** ENV is - $ENV , Runner Tags - $CI_RUNNER_TAGS *** "
+    - terraform -chdir=$CHDIR init -reconfigure
+    - terraform -chdir=$CHDIR plan -refresh=true -out=planfile
+  dependencies:
+    - validate
+  artifacts:
+    paths:
+      - $CHDIR/planfile
+
+deploy:
+  stage: deploy
+  script:
+    - terraform --version
+    - echo " *** Environment is - $ENV , Runner Tags - $CI_RUNNER_TAGS *** "
+    - terraform -chdir=$CHDIR init -reconfigure
+    - terraform -chdir=$CHDIR apply planfile
+    - terraform -chdir=$CHDIR output -json >> tf_output.json
+    - terraform -chdir=$CHDIR output >> tf_output.properties
+  dependencies:
+    - plan
+  allow_failure: false
+
+cleanup:
+  stage: cleanup
+  script:
+    - terraform --version
+    - echo " *** Environment is - $ENV , Runner Tags - $CI_RUNNER_TAGS *** "
+    - terraform -chdir=$CHDIR init -reconfigure
+    - terraform -chdir=$CHDIR destroy --auto-approve
+  when: manual
+  allow_failure: false
