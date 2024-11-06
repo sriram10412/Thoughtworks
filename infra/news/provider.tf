@@ -1,6 +1,6 @@
 # Setup our aws provider
 variable "region" {
-  default = "us-east-1"
+  default = "ap-southeast-1"
 }
 provider "aws" {
   region = "${var.region}"
@@ -8,8 +8,8 @@ provider "aws" {
 
 terraform {
   backend "s3" {
-    bucket = "news4321-terraform-infra-na"
-    region = "us-east-1"
+    bucket = "news4321-sriram-infra-na"
+    region = "ap-southeast-1"
     dynamodb_table = "news4321-terraform-locks"
     key = "news/terraform.tfstate"
   }

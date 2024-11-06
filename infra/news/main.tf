@@ -93,7 +93,7 @@ resource "aws_instance" "front_end" {
   availability_zone = "${var.region}a"
 
   subnet_id = local.subnet_id
-
+  
   vpc_security_group_ids = [
     "${aws_security_group.front_end_sg.id}",
     "${aws_security_group.ssh_access.id}"
